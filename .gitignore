@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.venv/
+.ruff_cache/
+.pytest_cache/
+build/
+data/
+lora_out/
+*.parquet
+*.safetensors
