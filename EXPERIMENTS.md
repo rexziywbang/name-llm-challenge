@@ -1,6 +1,6 @@
 # Experiment record
 
-The project asked two different questions. Could a feature distinguish closely related generators under controlled conditions? Could that feature improve the full 18-class system on unseen text? A positive answer to the first question sometimes produced a negative answer to the second.
+One experiment began with two closely related generators. If both models answer the same prompt, what can you measure in the text that gives the author away? As the project grew to an 18-way ensemble, a second question kept coming up. Once the existing classifier has made its best guess, does the new signal actually change enough wrong answers into right ones? The runs below show where those questions led. All leaderboard scores refer to Kaggle’s public split.
 
 ## Context as a fingerprint
 
@@ -12,7 +12,13 @@ On 240 GLM passages in the prompt-grouped development folds, the gain features p
 
 Frozen representations from four depths of Qwen2.5-0.5B mix topic and style. E4 estimated topic by clustering inference passages with word TF-IDF and average-link cosine distance, then subtracting a cluster mean from standardized hidden features. Known prompt IDs were available during training. The final classifier fell back to its uncentered probe for inferred clusters smaller than three. [Inference code](kernels/predict_centered.py)
 
-The first variant lost **9.3 points** with one answer per prompt. Its selected centering strength could collapse a singleton to zero. The revised control subsampled 1, 2, 3, 6 or 18 answers per prompt and repeated the comparison across five seeds. The final gains were **0.78, 0.20, 2.83, 7.16 and 9.21 points**, respectively. Other prompts can still be falsely grouped even when each true prompt contributes one passage. The leaderboard gain of 2.6 points illustrates the deployment risk without establishing how many siblings were in the hidden test set. [Full ablation](results/e4_sibling_control.md)
+The first variant lost **9.3 percentage points** with one answer per prompt. With one passage in a cluster, subtracting the full cluster mean subtracts the passage from itself. I added the fallback, then reran the comparison across five seeds while varying how many answers to each held-out prompt the classifier could see.
+
+| Answers retained per prompt | 1 | 2 | 3 | 6 | 18 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Gain over the uncentered blend (percentage points) | +0.78 | +0.20 | +2.83 | +7.16 | +9.21 |
+
+The fallback uses **inferred** cluster size, so even the one-answer control can group passages from different prompts. The public gain was **2.6 points**. The test set’s actual prompt group sizes remain unknown. What the control established was how much the same method’s payoff could change just by thinning the evaluation batch. [Full ablation](results/e4_sibling_control.md)
 
 ## Two-stage LoRA under prompt-grouped evaluation
 
@@ -26,6 +32,17 @@ Both used the first 24 layers of Qwen3-8B-Base, rank-16 LoRA and eight pooled re
 | Two-stage | .528 | .493 | .479 | .521 | .535 | .5111 |
 
 The +5.83-point gain passed the advance rule of at least two points and positive results on at least four folds. Deployment caught another error: the inference code initially attached the head’s columns to the wrong class names. Correcting label order raised the standalone public score from .140 to .511. The corrected 50/50 blend scored .581, below the existing .588 reference. The training result stood even though the blend did not advance. [Recorded fold metrics](results/e8_folds.json)
+
+## What did the next 10,792 passages buy?
+
+E10 followed up on E8 by changing just the external pool used in the first training stage. E8 had kept prompts with answers from at least 12 distinct competition generators. Dropping that filter expanded the pool from **732 to 2,976 prompts** and brought in a less balanced mix of generators. Both runs excluded regenerations of official prompts. The adapter architecture, training schedule, second-stage official data and held-out folds stayed fixed.
+
+| Stage-one training pool | Passages | Pooled out-of-fold balanced accuracy |
+| --- | ---: | ---: |
+| E8 · high-coverage prompts | 11,928 | .5111 |
+| E10 · all eligible prompts | 22,720 | .5199 |
+
+The larger pool improved four of five folds. The strongest fold gain was **3.01 percentage points** and one fold fell **2.08 points**. The pooled gain of **0.88 points** missed the **1.00-point** threshold recorded before training, so E10 never went to the leaderboard. That gave me a narrower answer than “more data helps.” These extra passages helped a little on average. Since widening the pool also changed its prompt and label mix, this run can’t tell us what another 10,792 passages matching the original pool would have done.
 
 ## Submission history
 
